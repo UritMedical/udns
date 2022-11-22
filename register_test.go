@@ -1,8 +1,7 @@
 package udns
 
 func ExampleRegister() {
-	register, err := Register(
-		SetInstance("My App"),
+	register, err := NewRegister("",
 		SetService("http.tcp"),
 		SetHost("My-PC"),
 		SetPort(8080),

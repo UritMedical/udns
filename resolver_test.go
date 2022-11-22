@@ -3,11 +3,10 @@ package udns
 import "fmt"
 
 func ExampleNewListener() {
-	client := NewListener(
-		FindInstance("My App"),
+	client := NewResolver(
+		"My App",
 		FindService("http.tcp"),
 		FindHost("My-PC"),
-		FindKey("my app"),
 	)
 	defer client.Shutdown()
 	go func() {
