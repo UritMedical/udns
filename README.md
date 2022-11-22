@@ -7,8 +7,7 @@
 ## Usage
 ### Register a service
 ```go
-register, err := udns.Register(
-    SetInstance("My App"),
+register, err := udns.Register("My App",
     SetService("http.tcp"),
     SetHost("My-PC"),
     SetPort(8080),
@@ -22,11 +21,9 @@ defer register.Shutdown()
 ```
 ### Discover services on the network
 ```go
-client := NewListener(
-    FindInstance("My App"),
+client := NewListener("My App",
     FindService("http.tcp"),
     FindHost("My-PC"),
-    FindKey("my app"),
 )
 go func() {
     for {
