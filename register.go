@@ -25,7 +25,7 @@ func NewRegister(name string, opts ...RegisterOption) (server *Register, err err
 	}
 
 	go r.tcpGoroutine()
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(time.Millisecond * 1000)
 	go r.register()
 
 	if err != nil {

@@ -54,12 +54,12 @@ func (r *Resolver) Browser() {
 
 			// 过滤
 			if r.opt.instance != "" {
-				if strings.EqualFold(zEntry.Instance, r.opt.instance) {
+				if !strings.EqualFold(zEntry.Instance, r.opt.instance) {
 					continue
 				}
 			}
 			if r.opt.host != "" {
-				if strings.EqualFold(zEntry.HostName, r.opt.host) {
+				if !strings.EqualFold(zEntry.HostName, r.opt.host) {
 					continue
 				}
 			}
