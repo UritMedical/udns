@@ -13,6 +13,7 @@ register, err := udns.Register("My App",
     SetPort(8080),
     SetKey("my app"),
     SetIPs("192.168.1.5"),
+    SetTCP(true),
 )
 if err != nil {
     // process
@@ -24,6 +25,7 @@ defer register.Shutdown()
 client := NewListener("My App",
     FindService("http.tcp"),
     FindHost("My-PC"),
+	TCPCheck(true, 5),
 )
 go func() {
     for {
