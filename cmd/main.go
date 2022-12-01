@@ -13,13 +13,14 @@ import (
 
 var (
 	wait, port                  int
-	register, search            bool
+	register, search, tcp       bool
 	instance, service, host, ip string
 )
 
 func init() {
 	flag.IntVar(&wait, "wait", 120, "运行参数, 自动关闭时间, -1 无限制")
 	flag.BoolVar(&register, "reg", true, "进行注册?")
+	flag.BoolVar(&tcp, "tcp", false, "进行TCP检查连接?")
 	flag.BoolVar(&search, "search", true, "进行查询?")
 	flag.IntVar(&port, "port", 0, "注册参数, 服务端口")
 	flag.StringVar(&instance, "name", "", "注册/查询, 服务名称")
@@ -46,13 +47,15 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		time.Sleep(time.Millisecond * 300)
+		log.Println("register service success.")
+		time.Sleep(time.Millisecond * 1000)
 	}
 
 	if search {
 		client := udns.NewResolver(instance,
 			udns.FindService(service),
 			udns.FindHost(host),
+			udns.TCPCheck(tcp, 0),
 		)
 		go func() {
 			for {

@@ -2,6 +2,7 @@ package udns
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strings"
@@ -23,11 +24,11 @@ func NewRegister(name string, opts ...RegisterOption) (server *Register, err err
 	if name != "" {
 		r.opt.instance = strings.ReplaceAll(strings.TrimSpace(name), " ", "_")
 	}
-
-	go r.tcpGoroutine()
+	if r.opt.tcp {
+		go r.tcpGoroutine()
+	}
 	time.Sleep(time.Millisecond * 1000)
 	go r.register()
-
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +45,7 @@ func (r *Register) register() {
 		}
 		time.Sleep(time.Millisecond * 5000)
 		if err != nil {
-			fmt.Println("register service failed, err: ", err)
+			log.Println("register service failed, err: ", err)
 		}
 	}
 }
@@ -60,14 +61,14 @@ func (r *Register) Shutdown() {
 func (r *Register) tcpGoroutine() {
 	listen, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", r.opt.port))
 	if err != nil {
-		fmt.Println("start tcp failed, err: ", err)
+		log.Println("start tcp failed, err: ", err)
 		return
 	}
 	r.opt.port = listen.Addr().(*net.TCPAddr).Port
 	for {
 		conn, err := listen.Accept()
 		if err != nil {
-			fmt.Println("accept tcp failed, err: ", err)
+			log.Println("accept tcp failed, err: ", err)
 			continue
 		}
 		go func(net.Conn) {
@@ -89,6 +90,7 @@ type (
 		netIfaces []net.Interface
 		host      string
 		ips       []string
+		tcp       bool
 	}
 	RegisterOption func(opts *registerOptions)
 )
@@ -98,6 +100,7 @@ func initRegOpts(opts []RegisterOption) *registerOptions {
 		instance: fmt.Sprintf("default-%v", os.Getpid()),
 		service:  "_urit",
 		domain:   "local",
+		tcp:      false,
 	}
 	for _, opt := range opts {
 		opt(options)
@@ -142,5 +145,12 @@ func SetHost(host string) RegisterOption {
 func SetIPs(ips ...string) RegisterOption {
 	return func(opts *registerOptions) {
 		opts.ips = ips
+	}
+}
+
+// SetTCP setup tcp service
+func SetTCP(ok bool) RegisterOption {
+	return func(opts *registerOptions) {
+		opts.tcp = ok
 	}
 }

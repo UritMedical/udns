@@ -3,8 +3,12 @@ package udns
 import (
 	"context"
 	"fmt"
+	detect "github.com/allanpk716/go-protocol-detector/pkg"
+	"log"
 	"net"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/grandcat/zeroconf"
 )
@@ -40,45 +44,39 @@ func NewResolver(name string, opts ...ClientOpt) *Resolver {
 func (r *Resolver) Browser() {
 	// 启动回传协程
 	go func(results <-chan *zeroconf.ServiceEntry) {
-		for zEntry := range results {
-			zEntry.HostName = trimDot(strings.ReplaceAll(zEntry.HostName, zEntry.Domain, ""))
-			zEntry.Service = trimDot(strings.Trim(zEntry.Service, "_urit"))
+		for serviceEntry := range results {
+			serviceEntry.HostName = trimDot(strings.ReplaceAll(serviceEntry.HostName, serviceEntry.Domain, ""))
+			serviceEntry.Service = trimDot(strings.Trim(serviceEntry.Service, "_urit"))
 
 			entry := &ServiceEntry{
-				Instance: zEntry.Instance,
-				Service:  zEntry.Service,
-				Domain:   zEntry.Domain,
-				HostName: zEntry.HostName,
-				TTL:      zEntry.TTL,
+				Instance: serviceEntry.Instance,
+				Service:  serviceEntry.Service,
+				Domain:   serviceEntry.Domain,
+				HostName: serviceEntry.HostName,
+				TTL:      serviceEntry.TTL,
 			}
 
 			// 过滤
 			if r.opt.instance != "" {
-				if !strings.EqualFold(zEntry.Instance, r.opt.instance) {
+				if !strings.EqualFold(serviceEntry.Instance, r.opt.instance) {
 					continue
 				}
 			}
 			if r.opt.host != "" {
-				if !strings.EqualFold(zEntry.HostName, r.opt.host) {
+				if !strings.EqualFold(serviceEntry.HostName, r.opt.host) {
 					continue
 				}
 			}
 
-			for _, ipv4 := range zEntry.AddrIPv4 {
-				conn, err := net.Dial("tcp", fmt.Sprintf("%v:%v", ipv4.String(), zEntry.Port))
-				if err != nil {
-					continue
-				}
-				buf := [512]byte{}
-				n, err := conn.Read(buf[:])
-				if err != nil {
-					continue
-				}
-
-				if strings.EqualFold(string(buf[:n]), TCP_MSG) {
-					entry.AddrIPv4 = append(entry.AddrIPv4, ipv4)
-				}
+			ipFilterStart := time.Now()
+			if r.opt.tcpCheck {
+				entry.AddrIPv4 = r.filterIPs(serviceEntry.AddrIPv4, serviceEntry.Port)
+			} else {
+				entry.AddrIPv4 = r.filterIPsByNetSegment(serviceEntry.AddrIPv4)
 			}
+
+			log.Printf("filtering %s ips with %dms", serviceEntry.Instance, time.Since(ipFilterStart).Milliseconds())
+
 			r.Entries <- entry
 		}
 	}(r.entries)
@@ -87,10 +85,49 @@ func (r *Resolver) Browser() {
 	resolver, err := zeroconf.NewResolver(zeroconf.SelectIPTraffic(zeroconf.IPv4))
 	if err == nil {
 		err = resolver.Browse(context.Background(), r.opt.service, r.opt.domain, r.entries)
+		log.Println("start browse service...")
 	}
 	if err != nil {
-		fmt.Println("browse service failed, err: ", err)
+		log.Println("browse service failed, err: ", err)
 	}
+}
+
+// 通过网段判断
+func (r *Resolver) filterIPsByNetSegment(rmtIPs []net.IP) (resp []net.IP) {
+	locAddrs, _ := net.InterfaceAddrs()
+	for _, rmtIP := range rmtIPs {
+		for _, addr := range locAddrs {
+			if locIP, ok := addr.(*net.IPNet); ok {
+				if locIP.Contains(rmtIP) {
+					resp = append(resp, rmtIP)
+				}
+			}
+		}
+	}
+	return
+}
+
+// 通过tcp服务判断
+func (r *Resolver) filterIPs(rmtIPs []net.IP, port int) (resp []net.IP) {
+	var ips []string
+	for i := range rmtIPs {
+		ips = append(ips, rmtIPs[i].String())
+	}
+
+	resp = []net.IP{}
+	output, err := detect.NewScanTools(3, r.opt.tcpTimeout).Scan(detect.Common, detect.InputInfo{
+		Host: strings.Join(ips, ","),
+		Port: strconv.Itoa(port),
+	}, false)
+	if err != nil {
+		log.Println(err)
+	}
+	for k := range output.SuccessMapString {
+		if ip := net.ParseIP(k); ip != nil {
+			resp = append(resp, ip)
+		}
+	}
+	return resp
 }
 
 func (r *Resolver) Shutdown() {
@@ -102,19 +139,23 @@ func (r *Resolver) Shutdown() {
 
 type (
 	clientOptions struct {
-		instance string
-		service  string
-		domain   string
-		host     string
+		instance   string
+		service    string
+		domain     string
+		host       string
+		tcpCheck   bool
+		tcpTimeout time.Duration
 	}
 	ClientOpt func(opts *clientOptions)
 )
 
 func initClientOpts(opts []ClientOpt) *clientOptions {
 	options := &clientOptions{
-		instance: "",
-		service:  "_urit",
-		domain:   "local",
+		instance:   "",
+		service:    "_urit",
+		domain:     "local",
+		tcpCheck:   false,
+		tcpTimeout: 5 * time.Second,
 	}
 	for _, opt := range opts {
 		opt(options)
@@ -134,6 +175,15 @@ func FindHost(host string) ClientOpt {
 	return func(opts *clientOptions) {
 		if host != "" {
 			opts.host = host
+		}
+	}
+}
+
+func TCPCheck(ok bool, timeout int) ClientOpt {
+	return func(opts *clientOptions) {
+		opts.tcpCheck = ok
+		if timeout != 0 {
+			opts.tcpTimeout = time.Duration(timeout) * time.Second
 		}
 	}
 }
