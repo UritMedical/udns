@@ -57,6 +57,27 @@ func (r *Register) Shutdown() {
 	}
 }
 
+func (r *Register) GetIPs() (v4 []net.IP) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, ifi := range ifaces {
+		if (ifi.Flags&net.FlagUp) == 0 || (ifi.Flags&net.FlagMulticast) <= 0 {
+			continue
+		}
+		addrs, _ := ifi.Addrs()
+		for _, address := range addrs {
+			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ipnet.IP.To4() != nil {
+					v4 = append(v4, ipnet.IP)
+				}
+			}
+		}
+	}
+	return v4
+}
+
 // tcpGoroutine start a tcp server for client check connections
 func (r *Register) tcpGoroutine() {
 	listen, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", r.opt.port))

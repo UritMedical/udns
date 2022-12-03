@@ -18,6 +18,7 @@ register, err := udns.Register("My App",
 if err != nil {
     // process
 }
+fmt.Println(register.GetIPs())
 defer register.Shutdown()
 ```
 ### Discover services on the network
