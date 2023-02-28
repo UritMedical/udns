@@ -5,7 +5,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/grandcat/zeroconf"
@@ -36,17 +38,22 @@ func NewRegister(name string, opts ...RegisterOption) (server *Register, err err
 }
 
 func (r *Register) register() {
-	for {
-		var err error
-		if r.opt.host != "" {
-			r.server, err = zeroconf.RegisterProxy(r.opt.instance, r.opt.service, r.opt.domain, r.opt.port, r.opt.host, r.opt.ips, r.opt.text, r.opt.netIfaces)
-		} else {
-			r.server, err = zeroconf.Register(r.opt.instance, r.opt.service, r.opt.domain, r.opt.port, r.opt.text, r.opt.netIfaces)
-		}
-		time.Sleep(time.Millisecond * 5000)
-		if err != nil {
-			log.Println("register service failed, err: ", err)
-		}
+	var err error
+	if r.opt.host != "" {
+		r.server, err = zeroconf.RegisterProxy(r.opt.instance, r.opt.service, r.opt.domain, r.opt.port, r.opt.host, r.opt.ips, r.opt.text, r.opt.netIfaces)
+	} else {
+		r.server, err = zeroconf.Register(r.opt.instance, r.opt.service, r.opt.domain, r.opt.port, r.opt.text, r.opt.netIfaces)
+	}
+	time.Sleep(time.Millisecond * 5000)
+	if err != nil {
+		log.Println("register service failed, err: ", err)
+	}
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	select {
+	case <-sig:
+		r.Shutdown()
 	}
 }
 
